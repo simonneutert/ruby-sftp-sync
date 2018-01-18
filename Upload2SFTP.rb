@@ -26,7 +26,7 @@ module Upload2SFTP
     end
   end
 
-  def self.upload()
+  def self.upload
     host_url = 'yourdomain.com'
     username = 'xyz'
     p "Enter SSH/SFTP Password for user #{username}:"
@@ -61,7 +61,6 @@ module Upload2SFTP
   private
 
   def self.upload_dir(sftp, local_file, remote_dir, client)
-    begin
       # directory exists?
       sftp.dir.entries(remote_dir)
     rescue Net::SFTP::StatusException => e
@@ -75,7 +74,6 @@ module Upload2SFTP
 
 
   def self.upload_file(sftp, local_file, remote_file, client)
-    begin
       # does the file exist?
       rstat = sftp.file.open(remote_file).stat
       if File.stat(local_file).mtime > Time.at(rstat.mtime)
