@@ -1,0 +1,6 @@
+host_url: 'yourdomain.com'
+username: 'xyz'
+local_path: './_site'
+remote_path: '/httpdocs/public_html'
+file_perm: 0o644
+dir_perm: 0o755

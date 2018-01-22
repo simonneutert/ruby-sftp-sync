@@ -2,7 +2,8 @@ require 'net/ssh'
 require 'net/sftp'
 require 'find'
 require 'io/console'
-require 'pry'
+require 'yaml'
+
 
 # unpolute namespace
 module Upload2SFTP
@@ -27,16 +28,17 @@ module Upload2SFTP
   end
 
   def self.upload
-    host_url = 'yourdomain.com'
-    username = 'xyz'
+    config = YAML.load_file('./config.yml')
+    host_url = config['host_url']
+    username = config['username']
     p "Enter SSH/SFTP Password for user #{username}:"
     password = STDIN.noecho(&:gets).chomp # hidden user input
     server = Server.new(host_url, username, password)
 
-    local_path = './_site'
-    remote_path = '/httpdocs/public_html'
-    file_perm = 0o644
-    dir_perm = 0o755
+    local_path = config['local_path']
+    remote_path = config['remote_path']
+    file_perm = config['file_perm']
+    dir_perm = config['dir_perm']
     client = Client.new(local_path, remote_path, dir_perm, file_perm)
 
     puts 'Connecting to remote server'
@@ -61,6 +63,7 @@ module Upload2SFTP
   private
 
   def self.upload_dir(sftp, local_file, remote_dir, client)
+    begin
       # directory exists?
       sftp.dir.entries(remote_dir)
     rescue Net::SFTP::StatusException => e
@@ -72,8 +75,8 @@ module Upload2SFTP
     end
   end
 
-
   def self.upload_file(sftp, local_file, remote_file, client)
+    begin
       # does the file exist?
       rstat = sftp.file.open(remote_file).stat
       if File.stat(local_file).mtime > Time.at(rstat.mtime)
