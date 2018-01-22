@@ -37,8 +37,8 @@ module Upload2SFTP
 
     local_path = config['local_path']
     remote_path = config['remote_path']
-    file_perm = config['file_perm']
-    dir_perm = config['dir_perm']
+    file_perm = config['file_perm'].to_i(8)
+    dir_perm = config['dir_perm'].to_i(8)
     client = Client.new(local_path, remote_path, dir_perm, file_perm)
 
     puts 'Connecting to remote server'
