@@ -1,3 +1,14 @@
+# needs the following attributes
+# host_url: String
+# username: String
+# local_path: String
+# remote_path: String
+# file_perm: Hexadecimal
+# dir_perm: Hexadecimal
+#
+# why a Hexadecimal is needed...
+# https://en.wikipedia.org/wiki/File_system_permissions
+
 host_url: 'yourdomain.com'
 username: 'xyz'
 local_path: './_site'

@@ -8,6 +8,7 @@ require 'yaml'
 # unpolute namespace
 module Upload2SFTP
 
+  # Server holds your hosts specific data
   class Server
     attr_reader :host_url, :username, :password
     def initialize(host_url, username, password)
@@ -17,6 +18,7 @@ module Upload2SFTP
     end
   end
 
+  # Client holds your local settings
   class Client
     attr_reader :local_path, :remote_path, :dir_perm, :file_perm
     def initialize(local_path, remote_path, dir_perm, file_perm)
@@ -27,8 +29,18 @@ module Upload2SFTP
     end
   end
 
+  # Module referencing method
+  # run by calling Upload2SFTP.upload
+  # after setting up your config.yml
   def self.upload
-    config = YAML.load_file('./config.yml')
+    # load settings from config.yml
+    if File.exists?('./config.yml')
+      config = YAML.load_file('./config.yml')
+    else
+      puts 'config.yml not found, needs to be in the same directory as this script.'
+      exit()
+    end
+    
     host_url = config['host_url']
     username = config['username']
     p "Enter SSH/SFTP Password for user #{username}:"
