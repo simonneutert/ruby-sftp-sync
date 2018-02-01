@@ -1,9 +1,16 @@
+#!/usr/bin/env ruby
+
 require 'net/ssh'
 require 'net/sftp'
 require 'find'
 require 'io/console'
 require 'yaml'
+require 'rubygems'
+require 'commander/import'
+require 'fileutils'
 
+# remove
+require 'pry'
 
 # unpolute namespace
 module Upload2SFTP
@@ -29,18 +36,52 @@ module Upload2SFTP
     end
   end
 
-  # Module referencing method
-  # run by calling Upload2SFTP.upload
-  # after setting up your config.yml
-  def self.upload
-    # load settings from config.yml
-    if File.exists?('./config.yml')
-      config = YAML.load_file('./config.yml')
+  def self.upload(config_path="./config.yml")
+    connect_to_server() do |sftp, client, server|
+      begin
+        sftp.mkdir!(client.remote_path, permissions: client.dir_perm)
+      rescue Net::SFTP::StatusException => e
+        raise unless e.code == 4
+      end
+
+      Find.find(client.local_path) do |file|
+        next if File.stat(file).directory?
+        local_file = file.to_s
+        remote_file = client.remote_path + local_file.sub(client.local_path, '')
+        remote_dir = File.dirname(remote_file)
+
+        upload_dir(sftp, local_file, remote_dir, client)
+        upload_file(sftp, local_file, remote_file, client)
+      end
+    end
+  end
+
+  def self.clean(config_path="./config.yml")
+    connect_to_server() do |sftp, client, server|
+      subs = client.remote_path + "/*"
+      sftp.session.exec!("rm -rf #{subs}")
+    end
+  end
+
+  def self.remove(config_path="./config.yml")
+    connect_to_server() do |sftp, client, server|
+      subs = client.remote_path + "/*"
+      sftp.session.exec!("rm -rf #{subs}")
+      sftp.session.exec!("rm -rf #{client.remote_path}")
+    end
+  end
+
+  private
+
+  # loads the configuration from a config file
+  def self.load_configuration(config_path)
+    puts "Loading config..."
+    if File.exists?(config_path)
+      config = YAML.load_file(config_path)
     else
       puts 'config.yml not found, needs to be in the same directory as this script.'
       exit()
     end
-    
     host_url = config['host_url']
     username = config['username']
     p "Enter SSH/SFTP Password for user #{username}:"
@@ -53,18 +94,21 @@ module Upload2SFTP
     dir_perm = config['dir_perm'].to_i(8)
     client = Client.new(local_path, remote_path, dir_perm, file_perm)
 
+    return client, server
+  end
+
+  # connect_to_server
+  # loads configuration and instantiates Client and Server objects
+  # pass a block that gets executed on the established sftp connection
+  def self.connect_to_server
+    client, server = load_configuration('./test_config.yml')
     puts 'Connecting to remote server'
     Net::SSH.start(server.host_url, server.username, password: server.password) do |ssh|
       ssh.sftp.connect do |sftp|
-        puts 'Checking for files which need updating'
-        Find.find(client.local_path) do |file|
-          next if File.stat(file).directory?
-          local_file = file.to_s
-          remote_file = client.remote_path + local_file.sub(local_path, '')
-          remote_dir = File.dirname(remote_file)
-
-          upload_dir(sftp, local_file, remote_dir, client)
-          upload_file(sftp, local_file, remote_file, client)
+        if block_given?
+          yield(sftp, client, server)
+        else
+          puts "No block given, please specify."
         end
       end
     end
@@ -72,8 +116,7 @@ module Upload2SFTP
     puts 'File transfer complete'
   end
 
-  private
-
+  # upload directory
   def self.upload_dir(sftp, local_file, remote_dir, client)
     begin
       # directory exists?
@@ -87,6 +130,7 @@ module Upload2SFTP
     end
   end
 
+  # uploads a file
   def self.upload_file(sftp, local_file, remote_file, client)
     begin
       # does the file exist?
@@ -105,6 +149,7 @@ module Upload2SFTP
     end
   end
 
+  # create a directory
   def self.create_directory(sftp, client, dir_structure, remote_dir)
     # do subdirectories need to be created?
     if dir_structure.size <= 1
@@ -125,6 +170,92 @@ module Upload2SFTP
           next
         end
       end
+    end
+  end
+
+end
+
+program :name, 'Upload2SFTP'
+program :version, '0.5.1'
+program :description, 'simple sftp interaction'
+
+command :upload do |c|
+  c.syntax = 'Upload2SFTP upload [options]'
+  c.summary = 'uploads a directory and all its content to a webhoster'
+  c.description = ''
+  c.example 'description', 'command example'
+  c.option '--config x', 'Some switch that does something'
+  c.action do |args, options|
+    if options.config
+      if options.config.include?("./")
+        Upload2SFTP.upload(options.config)
+      else
+        Upload2SFTP.upload("./" + options.config)
+      end
+    else
+      Upload2SFTP.upload()
+    end
+  end
+end
+
+command :clean do |c|
+  c.syntax = 'Upload2SFTP clean [options]'
+  c.summary = 'cleans the remote directory from all content'
+  c.description = ''
+  c.example 'description', 'command example'
+  c.option '--config x', 'Some switch that does something'
+  c.action do |args, options|
+    # Do something or c.when_called Upload2SFTP::Commands::Clean
+    if options.config
+      if options.config.include?("./")
+        Upload2SFTP.clean(options.config)
+      else
+        Upload2SFTP.clean("./" + options.config)
+      end
+    else
+      Upload2SFTP.clean()
+    end
+  end
+end
+
+command :remove do |c|
+  c.syntax = 'Upload2SFTP remove [options]'
+  c.summary = 'removes the content completely'
+  c.description = ''
+  c.example 'description', 'command example'
+  c.option '--config x', 'Some switch that does something'
+  c.action do |args, options|
+    if options.config
+      if options.config.include?("./")
+        Upload2SFTP.remove(options.config)
+      else
+        Upload2SFTP.remove("./" + options.config)
+      end
+    else
+      Upload2SFTP.remove()
+    end
+  end
+end
+
+command :reupload do |c|
+  c.syntax = 'Upload2SFTP reupload [options]'
+  c.summary = ''
+  c.description = ''
+  c.example 'description', 'command example'
+  c.option '--config x', 'Some switch that does something'
+  c.action do |args, options|
+    puts "\n\n\tYou need to enter your password twice!\n\n"
+    if options.config
+      if options.config.include?("./")
+        Upload2SFTP.clean(options.config)
+        Upload2SFTP.upload(options.config)
+      else
+        Upload2SFTP.clean("./" + options.config)
+        Upload2SFTP.upload("./" + options.config)
+      end
+    else
+      Upload2SFTP.clean()
+      Upload2SFTP.upload()
     end
   end
 end
