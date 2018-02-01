@@ -13,7 +13,7 @@ require 'fileutils'
 # unpolute namespace
 module Upload2SFTP
 
-  # Server holds your hosts specific data
+  # Server holds your hosts' specific data
   class Server
     attr_reader :host_url, :username, :password
     def initialize(host_url, username, password)
@@ -23,7 +23,7 @@ module Upload2SFTP
     end
   end
 
-  # Client holds your local settings
+  # Client holds your client-side related settings
   class Client
     attr_reader :local_path, :remote_path, :dir_perm, :file_perm
     def initialize(local_path, remote_path, dir_perm, file_perm)
@@ -36,35 +36,30 @@ module Upload2SFTP
 
   def self.upload(config_path="./config.yml")
     connect_to_server(config_path) do |sftp, client, server|
-      begin
-        sftp.mkdir!(client.remote_path, permissions: client.dir_perm)
-      rescue Net::SFTP::StatusException => e
-        raise unless e.code == 4
-      end
-
+      create_root_dir(sftp, client)
       Find.find(client.local_path) do |file|
-        next if File.stat(file).directory?
-        local_file = file.to_s
-        remote_file = client.remote_path + local_file.sub(client.local_path, '')
-        remote_dir = File.dirname(remote_file)
-
-        upload_dir(sftp, local_file, remote_dir, client)
-        upload_file(sftp, local_file, remote_file, client)
+        if File.stat(file).directory?
+          next
+        else
+          local_file = file.to_s
+          remote_file = client.remote_path + local_file.sub(client.local_path, '')
+          remote_dir = File.dirname(remote_file)
+          upload_dir(sftp, local_file, remote_dir, client)
+          upload_file(sftp, local_file, remote_file, client)
+        end
       end
     end
   end
 
   def self.clean(config_path="./config.yml")
     connect_to_server(config_path) do |sftp, client, server|
-      subs = client.remote_path + "/*"
-      sftp.session.exec!("rm -rf #{subs}")
+      sftp.session.exec!("rm -rf #{client.remote_path + "/*"}")
     end
   end
 
   def self.remove(config_path="./config.yml")
     connect_to_server(config_path) do |sftp, client, server|
-      subs = client.remote_path + "/*"
-      sftp.session.exec!("rm -rf #{subs}")
+      sftp.session.exec!("rm -rf #{client.remote_path + "/*"}")
       sftp.session.exec!("rm -rf #{client.remote_path}")
     end
   end
@@ -78,7 +73,7 @@ module Upload2SFTP
       config = YAML.load_file(config_path)
     else
       puts 'config.yml not found, needs to be in the same directory as this script.'
-      exit()
+      exit() # no config no love
     end
     host_url = config['host_url']
     username = config['username']
@@ -106,12 +101,21 @@ module Upload2SFTP
         if block_given?
           yield(sftp, client, server)
         else
-          puts "No block given, please specify."
+          raise "No block given, please specify a block."
         end
-      end
-    end
+      end # sftp session closed
+    end # ssh session closed
     puts 'Disconnecting from remote server'
     puts 'File transfer complete'
+  end
+
+  # create root directory if missing
+  def self.create_root_dir(sftp, client)
+    begin
+      sftp.mkdir!(client.remote_path, permissions: client.dir_perm)
+    rescue Net::SFTP::StatusException => e
+      raise unless e.code == 4
+    end
   end
 
   # upload directory
@@ -130,12 +134,12 @@ module Upload2SFTP
 
   # uploads a file
   def self.upload_file(sftp, local_file, remote_file, client)
+    # does the file exist?
     begin
-      # does the file exist?
       rstat = sftp.file.open(remote_file).stat
+      # does the file need updating?
       if File.stat(local_file).mtime > Time.at(rstat.mtime)
-        # update file
-        sftp.upload!(local_file, remote_file)
+        sftp.upload!(local_file, remote_file) # update file
         puts "updating #{remote_file}"
       end
     rescue Net::SFTP::StatusException => e
@@ -150,27 +154,25 @@ module Upload2SFTP
   # create a directory
   def self.create_directory(sftp, client, dir_structure, remote_dir)
     # do subdirectories need to be created?
-    if dir_structure.size <= 1
-      # no subdirectories
+    if dir_structure.size <= 1 # no subdirectories
       sftp.mkdir!(remote_dir)
       puts "creating dir: #{remote_dir}"
     else
       # iterate over subdirectories and create them
       dir_structure.each_with_index do |_d, i|
         begin
-          # code diamond <3
+          # code diamond<3 ahead
           subdir = client.remote_path + "/#{dir_structure[0..i].join('/')}"
           sftp.mkdir!(subdir, permissions: client.dir_perm)
           puts "creating dir: #{subdir}"
         rescue Net::SFTP::StatusException => e
+          # directory or subdirectory exists already
           raise unless e.code == 4
-          # directory or subdirectory exists
           next
         end
       end
     end
   end
-
 end
 
 program :name, 'Upload2SFTP'
