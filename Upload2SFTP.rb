@@ -9,8 +9,6 @@ require 'rubygems'
 require 'commander/import'
 require 'fileutils'
 
-# remove
-require 'pry'
 
 # unpolute namespace
 module Upload2SFTP
@@ -37,7 +35,7 @@ module Upload2SFTP
   end
 
   def self.upload(config_path="./config.yml")
-    connect_to_server() do |sftp, client, server|
+    connect_to_server(config_path) do |sftp, client, server|
       begin
         sftp.mkdir!(client.remote_path, permissions: client.dir_perm)
       rescue Net::SFTP::StatusException => e
@@ -57,14 +55,14 @@ module Upload2SFTP
   end
 
   def self.clean(config_path="./config.yml")
-    connect_to_server() do |sftp, client, server|
+    connect_to_server(config_path) do |sftp, client, server|
       subs = client.remote_path + "/*"
       sftp.session.exec!("rm -rf #{subs}")
     end
   end
 
   def self.remove(config_path="./config.yml")
-    connect_to_server() do |sftp, client, server|
+    connect_to_server(config_path) do |sftp, client, server|
       subs = client.remote_path + "/*"
       sftp.session.exec!("rm -rf #{subs}")
       sftp.session.exec!("rm -rf #{client.remote_path}")
@@ -100,8 +98,8 @@ module Upload2SFTP
   # connect_to_server
   # loads configuration and instantiates Client and Server objects
   # pass a block that gets executed on the established sftp connection
-  def self.connect_to_server
-    client, server = load_configuration('./test_config.yml')
+  def self.connect_to_server(config_path)
+    client, server = load_configuration(config_path)
     puts 'Connecting to remote server'
     Net::SSH.start(server.host_url, server.username, password: server.password) do |ssh|
       ssh.sftp.connect do |sftp|
