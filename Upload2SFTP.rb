@@ -176,8 +176,10 @@ module Upload2SFTP
 end
 
 program :name, 'Upload2SFTP'
-program :version, '0.5.1'
+program :version, '0.5.2'
 program :description, 'simple sftp interaction'
+
+default_command :upload
 
 command :upload do |c|
   c.syntax = 'Upload2SFTP upload [options]'
