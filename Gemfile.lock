@@ -17,4 +17,4 @@ DEPENDENCIES
   net-ssh
 
 BUNDLED WITH
-   1.16.1
+   2.6.3
